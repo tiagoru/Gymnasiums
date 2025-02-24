@@ -15,13 +15,26 @@ from folium.plugins import MarkerCluster
 from geopy.distance import geodesic
 
 # 📝 **App Header**
+
 st.markdown("""
-# 🏫 Munich Gymnasiums Map (Test Version)
-This is a **Streamlit test version** that displays a map of **Munich** with Gymnasiums and the user's location.  
-🔍 **Helping citizens find the nearest Gymnasiums in Munich!**  
-👤 **Author**: Tiago Russomanno
----
-""")
+<style>
+.big-header {
+    font-size: 40px;
+    font-weight: bold;
+}
+.normal-text {
+    font-size: 18px;
+}
+</style>
+
+<h1 class="big-header">🏫 Munich Gymnasiums Map (Test Version)</h1>
+<p class="normal-text">
+This is a <strong>Streamlit test version</strong> that displays a map of <strong>Munich</strong> with Gymnasiums and the user's location.<br>
+🔍 <strong>Helping citizens find the nearest Gymnasiums in Munich!</strong><br>
+👤 <strong>Author</strong>: Tiago Russomanno
+</p>
+<hr>
+""", unsafe_allow_html=True)
 
 # 🚀 Load CSV Once
 if "df" not in st.session_state:
