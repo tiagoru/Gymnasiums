@@ -23,7 +23,7 @@ st.markdown("""
     font-weight: bold;
 }
 .normal-text {
-    font-size: 18px;
+    font-size: 12px;
 }
 </style>
 
