@@ -13,6 +13,7 @@ import pandas as pd
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 from geopy.distance import geodesic
+import requests
 
 # 📝 **App Header**
 
@@ -61,23 +62,42 @@ if st.button("🔄 Reload Map"):
 if "user_coords" not in st.session_state:
     st.session_state.user_coords = None
 
-# 📍 User Location Input
+# 🌍 **Geocoding with OpenCage API**
+def geocode_opencage(query):
+    api_key = "dd68ec01afb24f55b930ef03f5dd013b"  # Replace with your OpenCage API Key
+    url = f"https://api.opencagedata.com/geocode/v1/json?q={query}&key={api_key}"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if data["results"]:
+            lat = data["results"][0]["geometry"]["lat"]
+            lon = data["results"][0]["geometry"]["lng"]
+            address = data["results"][0]["formatted"]
+            return lat, lon, address
+        else:
+            return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Error geocoding: {e}")
+        return None
+
+# 📍 **User Location Input**
 st.header("📍 Enter Your Location")
-location_input = st.text_input("Enter address or coordinates (e.g., 'Munich' or '48.18, 11.55'):")
+location_input = st.text_input("Enter address or coordinates (e.g., 'Munich' or '48.18, 11.55'): ")
 
 if location_input and st.session_state.user_coords is None:  # Only run geocoder once
-    geolocator = Nominatim(user_agent="my_app", timeout=10)
     try:
-        location = geolocator.geocode(location_input)
-        if location:
-            st.session_state.user_coords = (location.latitude, location.longitude)
-            st.write(f"✅ Your Location: {location.address}")
+        result = geocode_opencage(location_input)
+        if result:
+            lat, lon, address = result
+            st.session_state.user_coords = (lat, lon)
+            st.write(f"✅ Your Location: {address}")
         else:
             st.error("❌ Location not found.")
     except Exception as e:
         st.error(f"❌ Error geocoding: {e}")
 
-# 🗺️ Display Map (Only If Location is Found)
+# 🗺️ **Display Map (Only If Location is Found)**
 if st.session_state.user_coords:
     my_coords = st.session_state.user_coords
 
@@ -85,7 +105,7 @@ if st.session_state.user_coords:
     m = folium.Map(location=my_coords, zoom_start=12)
     folium.Marker(my_coords, popup="Your Location", icon=folium.Icon(color='red')).add_to(m)
 
-    # 🔵 Add Distance Circles (1 km, 2 km, 3 km, 4 km, 5 km)
+    # 🔵 **Add Distance Circles (1 km to 5 km)**
     for distance in [1, 2, 3, 4, 5]:
         folium.Circle(
             radius=distance * 1000,  # Convert km to meters
@@ -96,7 +116,7 @@ if st.session_state.user_coords:
             popup=f"{distance} km radius"
         ).add_to(m)
 
-    # 📌 Add Schools to the Map
+    # 📌 **Add Schools to the Map**
     marker_cluster = MarkerCluster().add_to(m)  # Cluster for better visibility
 
     for _, row in df.iterrows():
@@ -107,7 +127,7 @@ if st.session_state.user_coords:
             popup_text = (f"<b>{row['School Name']}</b><br>"
                           f"Distance: {distance:.2f} km<br>"
                           f"Focus: {row.get('Focus', 'N/A')}")
-            
+
             folium.Marker(
                 location=school_coords,
                 popup=popup_text,
@@ -116,7 +136,7 @@ if st.session_state.user_coords:
         except Exception as e:
             st.error(f"❌ Error adding school: {e}")
 
-    # 📌 Display the Map
+    # 📌 **Display the Map**
     st_folium(m, width=700, height=500)
 
     # 📖 **Abbreviations Legend**
@@ -130,4 +150,3 @@ if st.session_state.user_coords:
     - **WSG-S**: Wirtschafts- und Sozialwissenschaftliches Gymnasium mit sozialwissenschaftlichem Profil  
     - **WSG-W**: Wirtschafts- und Sozialwissenschaftliches Gymnasium mit wirtschaftswissenschaftlichem Profil  
     """)
-
