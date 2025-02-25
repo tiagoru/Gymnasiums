@@ -1,0 +1,152 @@
+# Description: This is a Streamlit app that displays a map of Munich with Gymnasiums and the user's location.
+# tryinh to help citizens to find the nearest gymnasiums in Munich
+# this is a test version of the app
+# Author: Tiago Russomanno
+# Date: 2021-09-29
+# Libraries: pandas, streamlit, folium, geopy
+############################################################################################
+
+import streamlit as st
+import folium
+from geopy.geocoders import Nominatim
+import pandas as pd
+from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster
+from geopy.distance import geodesic
+import requests
+
+# 📝 **App Header**
+
+st.markdown("""
+<style>
+.big-header {
+    font-size: 40px;
+    font-weight: bold;
+}
+.normal-text {
+    font-size: 12px;
+}
+</style>
+
+<h1 class="big-header">🏫 Munich Gymnasiums Map (Test Version)</h1>
+<p class="normal-text">
+This is a <strong>Streamlit test version</strong> that displays a map of <strong>Munich</strong> with Gymnasiums and the user's location.<br>
+🔍 <strong>Helping citizens find the nearest Gymnasiums in Munich!</strong><br>
+👤 <strong>Author</strong>: Tiago Russomanno
+</p>
+<hr>
+""", unsafe_allow_html=True)
+
+# 🚀 Load CSV Once
+if "df" not in st.session_state:
+    try:
+        df = pd.read_csv("munich_gymnasiums_extended.csv")
+        st.session_state.df = df  # Store in session state
+    except Exception as e:
+        st.error(f"❌ Error loading CSV: {e}")
+        st.stop()
+
+df = st.session_state.df  # Use stored data
+
+# 📌 Ensure Latitude & Longitude Columns Exist
+if 'Latitude' not in df.columns or 'Longitude' not in df.columns:
+    st.error("❌ CSV file is missing 'Latitude' or 'Longitude' columns!")
+    st.stop()
+
+# 🔄 Reload Button
+if st.button("🔄 Reload Map"):
+    st.session_state.user_coords = None  # Reset user coordinates
+    st.rerun()  # Rerun the app
+
+# 🔍 Manage Session State for User Coordinates
+if "user_coords" not in st.session_state:
+    st.session_state.user_coords = None
+
+# 🌍 **Geocoding with OpenCage API**
+def geocode_opencage(query):
+    api_key = "dd68ec01afb24f55b930ef03f5dd013b"  # Replace with your OpenCage API Key
+    url = f"https://api.opencagedata.com/geocode/v1/json?q={query}&key={api_key}"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if data["results"]:
+            lat = data["results"][0]["geometry"]["lat"]
+            lon = data["results"][0]["geometry"]["lng"]
+            address = data["results"][0]["formatted"]
+            return lat, lon, address
+        else:
+            return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Error geocoding: {e}")
+        return None
+
+# 📍 **User Location Input**
+st.header("📍 Enter Your Location")
+location_input = st.text_input("Enter address or coordinates (e.g., 'Munich' or '48.18, 11.55'): ")
+
+if location_input and st.session_state.user_coords is None:  # Only run geocoder once
+    try:
+        result = geocode_opencage(location_input)
+        if result:
+            lat, lon, address = result
+            st.session_state.user_coords = (lat, lon)
+            st.write(f"✅ Your Location: {address}")
+        else:
+            st.error("❌ Location not found.")
+    except Exception as e:
+        st.error(f"❌ Error geocoding: {e}")
+
+# 🗺️ **Display Map (Only If Location is Found)**
+if st.session_state.user_coords:
+    my_coords = st.session_state.user_coords
+
+    # Create the map
+    m = folium.Map(location=my_coords, zoom_start=12)
+    folium.Marker(my_coords, popup="Your Location", icon=folium.Icon(color='red')).add_to(m)
+
+    # 🔵 **Add Distance Circles (1 km to 5 km)**
+    for distance in [1, 2, 3, 4, 5]:
+        folium.Circle(
+            radius=distance * 1000,  # Convert km to meters
+            location=my_coords,
+            color='blue',
+            fill=True,
+            fill_opacity=0.1,
+            popup=f"{distance} km radius"
+        ).add_to(m)
+
+    # 📌 **Add Schools to the Map**
+    marker_cluster = MarkerCluster().add_to(m)  # Cluster for better visibility
+
+    for _, row in df.iterrows():
+        try:
+            school_coords = (row["Latitude"], row["Longitude"])  # Ensure correct order
+            # Calculate the distance between user location and school
+            distance = geodesic(my_coords, school_coords).km
+            popup_text = (f"<b>{row['School Name']}</b><br>"
+                          f"Distance: {distance:.2f} km<br>"
+                          f"Focus: {row.get('Focus', 'N/A')}")
+
+            folium.Marker(
+                location=school_coords,
+                popup=popup_text,
+                icon=folium.Icon(color="green", icon="info-sign")
+            ).add_to(marker_cluster)
+        except Exception as e:
+            st.error(f"❌ Error adding school: {e}")
+
+    # 📌 **Display the Map**
+    st_folium(m, width=700, height=500)
+
+    # 📖 **Abbreviations Legend**
+    st.markdown("### 📘 Gymnasium Focus Abbreviations")
+    st.write("""
+    - **HG**: Humanistisches Gymnasium  
+    - **MuG**: Musisches Gymnasium  
+    - **NTG**: Naturwissenschaftlich-technologisches Gymnasium  
+    - **SG**: Sprachliches Gymnasium  
+    - **SG.HG**: Sprachliches Gymnasium mit humanistischem Profil  
+    - **WSG-S**: Wirtschafts- und Sozialwissenschaftliches Gymnasium mit sozialwissenschaftlichem Profil  
+    - **WSG-W**: Wirtschafts- und Sozialwissenschaftliches Gymnasium mit wirtschaftswissenschaftlichem Profil  
+    """)
